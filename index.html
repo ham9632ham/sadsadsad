@@ -1,15 +1,260 @@
-import React, { useState, useEffect } from 'react';
-import { Armchair, Lamp, Clock, Refrigerator, Tv, Bed, Fan, Utensils, Monitor } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Play, RotateCcw, Trophy, Timer, Star, XCircle, CheckCircle2 } from 'lucide-react';
 
-const HouseholdGame = () => {
-  // ข้อมูลเกม: ไอคอน และ คำตอบ
-  const gameData = [
-    { id: 1, icon: <Armchair size={120} className="text-blue-500" />, answer: "เก้าอี้" },
-    { id: 2, icon: <Lamp size={120} className="text-yellow-500" />, answer: "โคมไฟ" },
-    { id: 3, icon: <Clock size={120} className="text-gray-600" />, answer: "นาฬิกา" },
-    { id: 4, icon: <Refrigerator size={120} className="text-teal-400" />, answer: "ตู้เย็น" },
-    { id: 5, icon: <Tv size={120} className="text-black" />, answer: "ทีวี" },
-    { id: 6, icon: <Bed size={120} className="text-indigo-500" />, answer: "เตียง" },
-    { id: 7, icon: <Fan size={120} className="text-cyan-500" />, answer: "พัดลม" },
-    { id: 8, icon: <Utensils size={120} className="text-orange-500" />, answer: "ช้อนส้อม" },
-    { id: 9, icon: <Monitor size={120} className="text-purpl...
+// ข้อมูลประเภทขยะและไอเทมต่างๆ
+const CATEGORIES = {
+  ORGANIC: {
+    id: 'organic',
+    name: 'ขยะอินทรีย์',
+    color: 'bg-green-500 hover:bg-green-600',
+    textColor: 'text-green-600',
+    description: 'ย่อยสลายได้ (เศษอาหาร, ใบไม้)',
+    borderColor: 'border-green-500'
+  },
+  RECYCLE: {
+    id: 'recycle',
+    name: 'รีไซเคิล',
+    color: 'bg-yellow-400 hover:bg-yellow-500',
+    textColor: 'text-yellow-600',
+    description: 'นำกลับมาใช้ใหม่ (แก้ว, กระดาษ, พลาสติก)',
+    borderColor: 'border-yellow-400'
+  },
+  GENERAL: {
+    id: 'general',
+    name: 'ขยะทั่วไป',
+    color: 'bg-blue-500 hover:bg-blue-600',
+    textColor: 'text-blue-600',
+    description: 'ย่อยสลายยาก (ถุงพลาสติก, โฟม)',
+    borderColor: 'border-blue-500'
+  },
+  HAZARDOUS: {
+    id: 'hazardous',
+    name: 'ขยะอันตราย',
+    color: 'bg-red-500 hover:bg-red-600',
+    textColor: 'text-red-600',
+    description: 'สารเคมี, ถ่านไฟฉาย, หลอดไฟ',
+    borderColor: 'border-red-500'
+  }
+};
+
+const ITEMS = [
+  { id: 1, emoji: '🍌', name: 'เปลือกกล้วย', category: 'organic' },
+  { id: 2, emoji: '🦴', name: 'กระดูกไก่', category: 'organic' },
+  { id: 3, emoji: '🥬', name: 'เศษผัก', category: 'organic' },
+  { id: 4, emoji: '🍂', name: 'ใบไม้แห้ง', category: 'organic' },
+  { id: 5, emoji: '🐟', name: 'ก้างปลา', category: 'organic' },
+  { id: 6, emoji: '🥤', name: 'แก้วพลาสติก', category: 'recycle' },
+  { id: 7, emoji: '📰', name: 'หนังสือพิมพ์', category: 'recycle' },
+  { id: 8, emoji: '📦', name: 'กล่องลัง', category: 'recycle' },
+  { id: 9, emoji: '🍾', name: 'ขวดแก้ว', category: 'recycle' },
+  { id: 10, emoji: '🥫', name: 'กระป๋องอลูมิเนียม', category: 'recycle' },
+  { id: 11, emoji: '🥡', name: 'กล่องโฟม', category: 'general' },
+  { id: 12, emoji: '🍬', name: 'ซองขนม', category: 'general' },
+  { id: 13, emoji: '🥢', name: 'ตะเกียบใช้แล้วทิ้ง', category: 'general' },
+  { id: 14, emoji: '🛍️', name: 'ถุงพลาสติกเปื้อน', category: 'general' },
+  { id: 15, emoji: '🔋', name: 'ถ่านไฟฉาย', category: 'hazardous' },
+  { id: 16, emoji: '💡', name: 'หลอดไฟ', category: 'hazardous' },
+  { id: 17, emoji: '🧴', name: 'กระป๋องสเปรย์', category: 'hazardous' },
+  { id: 18, emoji: '💊', name: 'ยาหมดอายุ', category: 'hazardous' },
+  { id: 19, emoji: '📱', name: 'มือถือพัง', category: 'hazardous' },
+  { id: 20, emoji: '🧻', name: 'ทิชชู่ใช้แล้ว', category: 'general' },
+];
+
+export default function App() {
+  const [gameState, setGameState] = useState('menu'); // menu, playing, ended
+  const [score, setScore] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(60);
+  const [currentItem, setCurrentItem] = useState(null);
+  const [feedback, setFeedback] = useState(null); // { type: 'correct' | 'wrong', message: string }
+  const [streak, setStreak] = useState(0);
+  const [highScore, setHighScore] = useState(0);
+
+  // สุ่มไอเทมใหม่
+  const generateNewItem = useCallback(() => {
+    const randomIndex = Math.floor(Math.random() * ITEMS.length);
+    setCurrentItem(ITEMS[randomIndex]);
+  }, []);
+
+  // เริ่มเกม
+  const startGame = () => {
+    setScore(0);
+    setTimeLeft(30); // เวลา 30 วินาที
+    setStreak(0);
+    setGameState('playing');
+    setFeedback(null);
+    generateNewItem();
+  };
+
+  // ตรวจสอบคำตอบ
+  const handleSort = (selectedCategory) => {
+    if (gameState !== 'playing') return;
+
+    const isCorrect = selectedCategory === currentItem.category;
+
+    if (isCorrect) {
+      const points = 10 + (streak * 2); // คะแนนโบนัสจากการตอบถูกต่อเนื่อง
+      setScore(prev => prev + points);
+      setStreak(prev => prev + 1);
+      setFeedback({ type: 'correct', message: `เยี่ยมมาก! +${points}` });
+      // สุ่มไอเทมใหม่ทันที
+      setTimeout(() => {
+          setFeedback(null);
+          generateNewItem();
+      }, 300);
+    } else {
+      setStreak(0);
+      setTimeLeft(prev => Math.max(0, prev - 3)); // หักเวลา 3 วินาทีเมื่อตอบผิด
+      setFeedback({ type: 'wrong', message: 'ผิดถัง! -3 วินาที' });
+      // ค้างไว้แป๊บนึงเพื่อให้รู้ว่าผิด
+      setTimeout(() => {
+        setFeedback(null);
+        generateNewItem();
+      }, 500);
+    }
+  };
+
+  // Game Loop Timer
+  useEffect(() => {
+    let timer;
+    if (gameState === 'playing' && timeLeft > 0) {
+      timer = setInterval(() => {
+        setTimeLeft(prev => prev - 1);
+      }, 1000);
+    } else if (timeLeft === 0 && gameState === 'playing') {
+      setGameState('ended');
+      if (score > highScore) setHighScore(score);
+    }
+    return () => clearInterval(timer);
+  }, [gameState, timeLeft, score, highScore]);
+
+  return (
+    <div className="min-h-screen bg-slate-100 font-sans text-slate-800 flex flex-col items-center justify-center p-4">
+      
+      {/* ส่วนหัวของเกม */}
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden mb-6">
+        <div className="bg-slate-800 p-4 flex justify-between items-center text-white">
+          <h1 className="text-xl font-bold flex items-center gap-2">
+            🌱 ฮีโร่แยกขยะ
+          </h1>
+          <div className="flex items-center gap-4 text-sm">
+            <div className="flex items-center gap-1">
+              <Trophy size={16} className="text-yellow-400" />
+              <span>{highScore}</span>
+            </div>
+          </div>
+        </div>
+        
+        {/* แถบสถานะขณะเล่น */}
+        {gameState === 'playing' && (
+          <div className="p-4 bg-slate-50 border-b flex justify-between items-center">
+            <div className="flex flex-col">
+              <span className="text-xs text-slate-500 uppercase font-bold">คะแนน</span>
+              <span className="text-2xl font-black text-slate-800">{score}</span>
+            </div>
+            
+            {/* Streak Indicator */}
+            {streak > 1 && (
+              <div className="flex flex-col items-center animate-bounce">
+                <span className="text-xs text-orange-500 font-bold">COMBO</span>
+                <span className="text-xl font-black text-orange-600">x{streak}</span>
+              </div>
+            )}
+
+            <div className="flex flex-col items-end">
+              <span className="text-xs text-slate-500 uppercase font-bold">เวลา</span>
+              <div className={`text-2xl font-black flex items-center gap-1 ${timeLeft <= 5 ? 'text-red-500 animate-pulse' : 'text-slate-800'}`}>
+                <Timer size={20} />
+                {timeLeft}s
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* พื้นที่เล่นเกมหลัก */}
+      <div className="w-full max-w-md relative">
+        
+        {/* หน้าเมนู */}
+        {gameState === 'menu' && (
+          <div className="bg-white rounded-2xl shadow-xl p-8 text-center space-y-6">
+            <div className="text-6xl mb-4 animate-bounce">🌍</div>
+            <h2 className="text-2xl font-bold text-slate-800">พร้อมช่วยโลกหรือยัง?</h2>
+            <p className="text-slate-600">แยกขยะให้ถูกต้องและรวดเร็วที่สุด<br/>ทำคอมโบเพื่อคะแนนพิเศษ!</p>
+            
+            <button 
+              onClick={startGame}
+              className="w-full py-4 bg-green-500 hover:bg-green-600 text-white rounded-xl font-bold text-lg shadow-lg transform transition active:scale-95 flex items-center justify-center gap-2"
+            >
+              <Play fill="currentColor" /> เริ่มเกม
+            </button>
+          </div>
+        )}
+
+        {/* หน้าจบเกม */}
+        {gameState === 'ended' && (
+          <div className="bg-white rounded-2xl shadow-xl p-8 text-center space-y-6 animate-fade-in">
+            <div className="text-6xl mb-4">🏁</div>
+            <h2 className="text-3xl font-bold text-slate-800">หมดเวลา!</h2>
+            
+            <div className="bg-slate-100 p-6 rounded-xl">
+              <p className="text-slate-500 text-sm uppercase">คะแนนสุทธิ</p>
+              <p className="text-5xl font-black text-slate-800 mt-2">{score}</p>
+            </div>
+
+            <button 
+              onClick={startGame}
+              className="w-full py-4 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-bold text-lg shadow-lg transform transition active:scale-95 flex items-center justify-center gap-2"
+            >
+              <RotateCcw /> เล่นอีกครั้ง
+            </button>
+          </div>
+        )}
+
+        {/* หน้าจอขณะเล่น */}
+        {gameState === 'playing' && currentItem && (
+          <div className="space-y-6">
+            
+            {/* การ์ดแสดงไอเทม */}
+            <div className="bg-white rounded-2xl shadow-xl p-8 flex flex-col items-center justify-center min-h-[200px] relative">
+              
+              {/* Feedback Animation Overlay */}
+              {feedback && (
+                <div className={`absolute inset-0 rounded-2xl flex items-center justify-center bg-white/90 z-10 transition-all duration-300`}>
+                  <div className={`flex flex-col items-center ${feedback.type === 'correct' ? 'text-green-500' : 'text-red-500'}`}>
+                    {feedback.type === 'correct' ? <CheckCircle2 size={64} /> : <XCircle size={64} />}
+                    <span className="font-bold text-xl mt-2">{feedback.message}</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="text-8xl mb-4 transform hover:scale-110 transition cursor-default">
+                {currentItem.emoji}
+              </div>
+              <h3 className="text-2xl font-bold text-slate-700">{currentItem.name}</h3>
+              <p className="text-slate-400 text-sm mt-2">อันนี้ทิ้งถังไหนดีนะ?</p>
+            </div>
+
+            {/* ปุ่มแยกประเภท (Grid 2x2) */}
+            <div className="grid grid-cols-2 gap-4">
+              {Object.values(CATEGORIES).map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => handleSort(cat.id)}
+                  className={`${cat.color} text-white p-4 rounded-xl shadow-md transform transition active:scale-95 flex flex-col items-center justify-center h-28 border-b-4 border-black/20`}
+                >
+                  <span className="font-bold text-lg">{cat.name}</span>
+                  <span className="text-xs opacity-90 mt-1 text-center font-light">{cat.description}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+      
+      <div className="mt-8 text-slate-400 text-xs text-center max-w-xs">
+        คำแนะนำ: แยกขยะให้ถูกต้องเพื่อทำคะแนน หากผิดจะถูกหักเวลา
+      </div>
+
+    </div>
+  );
+}
